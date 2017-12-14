@@ -1,0 +1,4 @@
+name = Switch
+description = Allows features to be switched on/off per node
+core = 7.x
+php = 5.5
