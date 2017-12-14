@@ -1,0 +1,36 @@
+<?php
+
+/**
+ * @file
+ * Contains switch_dfp.module.
+ */
+
+/**
+ * Implements hook_switch_info().
+ */
+function switch_dfp_switch_info() {
+  return array(
+    'disable_dfp' => array(
+      'label' => 'Disable DFP',
+      'entity_types' => array('node'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_dfp_tag_load_alter().
+ *
+ * @param $tag
+ */
+function switch_dfp_dfp_tag_load_alter(&$tag) {
+  if (path_is_admin(current_path())) {
+    return;
+  }
+
+  $node = menu_get_object('node', 1);
+  if (node_is_page($node)) {
+    if (switch_is_enabled('node', $node->nid, 'disable_dfp')) {
+      $tag->disabled = TRUE;
+    }
+  }
+}

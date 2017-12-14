@@ -1,0 +1,55 @@
+<?php
+
+/**
+ * @file
+ * Contains switch.install.
+ */
+
+/**
+ * Implements hook_install.
+ *
+ * Add new table for unpublished switch nodes.
+ */
+function switch_schema() {
+  $schema['switch_entity'] = array(
+    'description' => 'Stores switches per entity.',
+    'primary key' => array('entity_id', 'entity_type', 'switch'),
+    'fields' => array(
+      'entity_id' => array(
+        'description' => 'The entity_id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'entity_type' => array(
+        'description' => 'The entity_type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'switch' => array(
+        'description' => 'The switch machine name.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating whether the switch is on or off.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+      ),
+    ),
+    'indexes' => array(
+      'entity_id' => array('entity_id'),
+      'entity_type' => array('entity_type'),
+      'switch' => array('switch'),
+      'status' => array('status'),
+    ),
+  );
+
+  return $schema;
+}

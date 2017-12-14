@@ -4,3 +4,225 @@
  * @file
  * Contains switch.module.
  */
+
+/**
+ * Enable a switch.
+ *
+ * @param $entity_type
+ * @param $entity_id
+ * @param $switch_name
+ *
+ * @throws \Exception
+ */
+function switch_enable_switch($entity_type, $entity_id, $switch_name) {
+  db_merge('switch_entity')
+    ->key(array(
+      'entity_id' => $entity_id,
+      'entity_type' => $entity_type,
+      'switch' => $switch_name,
+    ))
+    ->fields(array('status' => 1))
+    ->execute();
+
+  // Clear the cache.
+  switch_clear_cache($entity_type, $entity_id, $switch_name);
+}
+
+/**
+ * Disable a switch.
+ *
+ * @param $entity_type
+ * @param $entity_id
+ * @param $switch_name
+ *
+ * @throws \Exception
+ */
+function switch_disable_switch($entity_type, $entity_id, $switch_name) {
+  db_delete('switch_entity')
+    ->condition('entity_id', $entity_id, '=')
+    ->condition('entity_type', $entity_type, '=')
+    ->condition('switch', $switch_name, '=')
+    ->execute();
+
+  // Clear the cache.
+  switch_clear_cache($entity_type, $entity_id, $switch_name);
+}
+
+/**
+ * Implements hook_permission().
+ */
+function switch_permission() {
+  $permissions = array();
+
+  if (!$switch_info = module_invoke_all('switch_info')) {
+    return $permissions;
+  }
+
+  // Global permission to edit all switches.
+  $permissions['manage all switches'] = array(
+    'title' => t('Manage all switches'),
+  );
+
+  // Create permission per switch.
+  foreach ($switch_info as $switch => $info) {
+    foreach ((array) $info['entity_types'] as $entity_type) {
+      $permissions[_switch_permission_key($entity_type, $switch)] = array(
+        'title' => t($info['label'] . ' per ' . $entity_type),
+      );
+    }
+  }
+
+  return $permissions;
+}
+
+/**
+ * Construct switch permission key for entity_type.
+ *
+ * @param $entity_type
+ * @param $switch
+ * @return string
+ */
+function _switch_permission_key($entity_type, $switch) {
+  return 'switch ' . $switch . ' ' . $entity_type;
+}
+
+/**
+ * Check if user can access a particular switch.
+ *
+ * @param $entity_type
+ * @param $switch
+ * @return bool
+ */
+function switch_can_access($entity_type, $switch) {
+  if (user_access('manage all switches')) {
+    return TRUE;
+  }
+  return user_access(_switch_permission_key($entity_type, $switch));
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ */
+function switch_form_node_form_alter(&$form, &$form_state, $form_id) {
+  if (!$switch_info = module_invoke_all('switch_info')) {
+    return;
+  }
+
+  foreach ($switch_info as $switch => $info) {
+    $switch_enabled = 0;
+    if (isset($form_state['node']->nid) && switch_is_enabled('node', $form_state['node']->nid, $switch)) {
+      $switch_enabled = 1;
+    }
+    $form['options'][$switch] = array(
+      '#title' => t($info['label']),
+      '#type' => 'checkbox',
+      '#default_value' => $switch_enabled,
+      '#access' => switch_can_access('node', $switch),
+    );
+  }
+
+  // Form callback for node enabled.
+  $form['actions']['submit']['#submit'][] = 'switch_node_enabled_form_submit';
+}
+
+/**
+ * Form callback to save the switch status.
+ */
+function switch_node_enabled_form_submit(&$form, $form_state) {
+  if (!$switch_info = module_invoke_all('switch_info')) {
+    return;
+  }
+
+  foreach ($switch_info as $switch => $info) {
+    if (!switch_can_access('node', $switch)) {
+      continue;
+    }
+
+    if (isset($form_state['node']->nid)) {
+      $node_id = $form_state['node']->nid;
+      if ($form_state['values'][$switch] == 1) {
+        switch_enable_switch('node', $node_id, $switch);
+      }
+      else {
+        switch_disable_switch('node', $node_id, $switch);
+      }
+    }
+  }
+}
+
+/**
+ * Get CID for switch.
+ *
+ * @param $entity_type
+ * @param $entity_id
+ * @param $switch
+ *
+ * @return string
+ */
+function _switch_get_switch_cid($entity_type, $entity_id, $switch) {
+  $cid_parts = array_map('strval', func_get_args());
+  return 'switch:' . implode(':', $cid_parts);
+}
+
+/**
+ * Clear cache with id $id
+ *
+ * @param $id
+ *   ID of the cache to clear.
+ */
+function switch_clear_cache($entity_type, $entity_id, $switch) {
+  // Clear bins as we have fresh data.
+  cache_clear_all(_switch_get_switch_cid($entity_type, $entity_id, $switch), 'cache');
+}
+
+/**
+ * Check if switch is enabled.
+ *
+ * @param $entity_type
+ * @param $entity_id
+ * @param $switch
+ *
+ * @return bool
+ */
+function switch_is_enabled($entity_type, $entity_id, $switch) {
+  // Setup a cache ID
+  $cid = _switch_get_switch_cid($entity_type, $entity_id, $switch);
+
+  // If a cached entry exists, return it
+  if ($cache = cache_get($cid, 'cache')) {
+    $status = $cache->data;
+  }
+  else {
+    $status = switch_db_is_enabled($entity_type, $entity_id, $switch);
+    // Cache the result.
+    cache_set($cid, $status, 'cache');
+  }
+
+  return $status;
+}
+
+/**
+ * Check if switch is enabled.
+ *
+ * @param $entity_type
+ * @param $entity_id
+ * @param $switch_name
+ *
+ * @return bool
+ *   TRUE if switch is enabled.
+ */
+function switch_db_is_enabled($entity_type, $entity_id, $switch_name) {
+  $result = db_select('switch_entity', 's')
+    ->fields('s', array('status'))
+    ->condition('entity_id', $entity_id, '=')
+    ->condition('entity_type', $entity_type, '=')
+    ->condition('switch', $switch_name, '=')
+    ->execute()
+    ->fetchAll();
+
+  if (isset($result[0]->status) && $result[0]->status == 1) {
+    return TRUE;
+  }
+
+  return FALSE;
+}

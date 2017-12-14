@@ -1,0 +1,5 @@
+name = Switch DFP
+description = Allows DFP to be switched on/off per node
+core = 7.x
+php = 5.5
+dependencies[] = switch
