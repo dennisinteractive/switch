@@ -54,7 +54,7 @@ function switch_disable_switch($entity_type, $entity_id, $switch_name) {
 function switch_permission() {
   $permissions = array();
 
-  if (!$switch_info = module_invoke_all('switch_info')) {
+  if (!$switch_info = switch_get_info()) {
     return $permissions;
   }
 
@@ -104,7 +104,7 @@ function switch_can_access($entity_type, $switch) {
  * Implements hook_form_BASE_FORM_ID_alter().
  */
 function switch_form_node_form_alter(&$form, &$form_state, $form_id) {
-  if (!$switch_info = module_invoke_all('switch_info')) {
+  if (!$switch_info = switch_entity_bundle_info('node', $form['#bundle'])) {
     return;
   }
 
@@ -129,7 +129,7 @@ function switch_form_node_form_alter(&$form, &$form_state, $form_id) {
  * Form callback to save the switch status.
  */
 function switch_node_enabled_form_submit(&$form, $form_state) {
-  if (!$switch_info = module_invoke_all('switch_info')) {
+  if (!$switch_info = switch_entity_bundle_info('node', $form['#bundle'])) {
     return;
   }
 
@@ -225,4 +225,179 @@ function switch_db_is_enabled($entity_type, $entity_id, $switch_name) {
   }
 
   return FALSE;
+}
+
+/**
+ * Check if switch is enabled for entity bundle.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @param $switch
+ * @return bool
+ */
+function switch_entity_bundle_is_enabled($entity_type, $bundle, $switch) {
+  if (!switch_entity_type_is_enabled($entity_type, $switch)) {
+    return FALSE;
+  }
+
+  $switches = variable_get('switch_enabled_switches', array());
+  if (!empty($switches[$entity_type][$bundle][$switch])) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Enable switch for bundle.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @param $switch
+ */
+function switch_entity_bundle_enable($entity_type, $bundle, $switch) {
+  _switch_entity_bundle_status($entity_type, $bundle, $switch, 1);
+}
+
+/**
+ * Disable switch for bundle.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @param $switch
+ */
+function switch_entity_bundle_disable($entity_type, $bundle, $switch) {
+  _switch_entity_bundle_status($entity_type, $bundle, $switch, 0);
+}
+
+/**
+ * Set switch status for bundle.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @param $switch
+ * @param $status
+ */
+function _switch_entity_bundle_status($entity_type, $bundle, $switch, $status) {
+  $switches = variable_get('switch_enabled_switches', array());
+  $switches[$entity_type][$bundle][$switch] = $status;
+  variable_set('switch_enabled_switches', $switches);
+}
+
+/**
+ * Check if switch is available to the specified entity type.
+ *
+ * @param $entity_type
+ * @param $switch
+ * @return bool
+ */
+function switch_entity_type_is_enabled($entity_type, $switch) {
+  $info = switch_entity_type_info($entity_type);
+  if (isset($info[$switch])) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Get switch info for specified entity type.
+ *
+ * @param $entity_type
+ * @return array
+ */
+function switch_entity_type_info($entity_type) {
+  $entity_type_info =  array();
+  foreach (switch_get_info() as $switch => $info) {
+    if (!empty($info['entity_types']) && in_array($entity_type, $info['entity_types'])) {
+      $entity_type_info[$switch] = $info;
+    }
+  }
+  return $entity_type_info;
+}
+
+/**
+ * Get switch info for specified entity bundle.
+ *
+ * @param $entity_type
+ * @param $bundle
+ * @return array
+ */
+function switch_entity_bundle_info($entity_type, $bundle) {
+  $entity_bundle_info =  array();
+  foreach (switch_entity_type_info($entity_type) as $switch => $info) {
+    if (switch_entity_bundle_is_enabled($entity_type, $bundle, $switch)) {
+      $entity_bundle_info[$switch] = $info;
+    }
+  }
+  return $entity_bundle_info;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Adds switch tab to node type form.
+ */
+function switch_form_node_type_form_alter(&$form, &$form_state) {
+  if (!$switch_info = switch_entity_type_info('node')) {
+    return;
+  }
+
+  $form['switch'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Switch'),
+    '#collapsible' => TRUE,
+    '#group' => 'additional_settings',
+    '#weight' => 20,
+    '#attributes' => array(
+      'class' => array('switch-node-type-settings-form'),
+    ),
+    '#access' => user_access('administer nodes'),
+  );
+
+  $form['switch']['description'] = array(
+    '#prefix' => '<div class="description">',
+    '#suffix' => '</div>',
+    '#markup' => t('Allow the following switches'),
+  );
+
+  foreach ($switch_info as $switch => $info) {
+    $form['switch'][$switch] = array(
+      '#type' => 'checkbox',
+      '#title' => t($info['label']),
+      '#default_value' => switch_entity_bundle_is_enabled('node', $form['#node_type']->type, $switch) ? 1 : 0,
+    );
+  }
+
+  $form['#submit'][] = 'switch_node_type_callback';
+}
+
+/**
+ * Save switch node type configuration.
+ */
+function switch_node_type_callback(&$form, &$form_state) {
+  if (!$switch_info = switch_entity_type_info('node')) {
+    return;
+  }
+  foreach ($switch_info as $switch => $info) {
+    if (!empty($form_state['complete form']['switch'][$switch]['#value'])) {
+      switch_entity_bundle_enable('node', $form['#node_type']->type, $switch);
+    }
+    else {
+      switch_entity_bundle_disable('node', $form['#node_type']->type, $switch);
+    }
+  }
+}
+
+/**
+ * Get switch info.
+ *
+ * @return array
+ */
+function switch_get_info() {
+  $info = &drupal_static(__FUNCTION__);
+  if (is_array($info)) {
+    return $info;
+  }
+  $info = module_invoke_all('switch_info');
+  return $info;
 }
