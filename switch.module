@@ -5,6 +5,8 @@
  * Contains switch.module.
  */
 
+require_once("views/switch.views.inc");
+
 /**
  * Enable a switch.
  *
