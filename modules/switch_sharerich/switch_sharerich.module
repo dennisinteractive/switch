@@ -16,3 +16,21 @@ function switch_sharerich_switch_info() {
     ),
   );
 }
+
+/**
+ * Implements hook_sharerich_set_load_alter().
+ *
+ * @param $set
+ */
+function switch_sharerich_sharerich_set_load_alter(&$set) {
+  if (path_is_admin(current_path())) {
+    return;
+  }
+
+  $node = menu_get_object('node', 1);
+  if (node_is_page($node)) {
+    if (switch_is_enabled('node', $node->nid, 'disable_sharerich')) {
+      $set->disabled = TRUE;
+    }
+  }
+}
