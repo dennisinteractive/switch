@@ -1,0 +1,18 @@
+<?php
+
+/**
+ * @file
+ * Contains switch_sharerich.module.
+ */
+
+/**
+ * Implements hook_switch_info().
+ */
+function switch_sharerich_switch_info() {
+  return array(
+    'disable_sharerich' => array(
+      'label' => 'Disable Sharerich',
+      'entity_types' => array('node'),
+    ),
+  );
+}
